@@ -1,0 +1,5 @@
+Duration_s_approx: 2.160000
+PCM_16_mono_bytes: 190512
+Event_rows: 16
+Rough_event_table_bytes(Java int[6][]): 384
+Reduction_factor_PCM_over_events: 496.12x (PCM larger)

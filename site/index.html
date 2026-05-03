@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UCUG1903 指令式编曲演示页</title>
+  <style>
+    :root { font-family: system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    body { margin: 0 auto; max-width: 860px; padding: 1.25rem 1rem 2rem; line-height: 1.55; color: #1a1a1a; background: #f6f7f9; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.5rem; }
+    h2 { font-size: 1.08rem; margin: 1.1rem 0 0.4rem; }
+    section.card {
+      background: #fff; border-radius: 12px; padding: 0.95rem 1.1rem;
+      box-shadow: 0 1px 8px rgb(0 0 0 / 7%); margin-bottom: 1rem;
+    }
+    .muted { color: #565656; font-size: 0.92rem; }
+    code { background: #eef1f6; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.92em; }
+    img { max-width: 100%; height: auto; border-radius: 8px; display: block; }
+    figure { margin: 0.6rem 0; }
+    figcaption { font-size: 0.88rem; color: #555; margin-top: 0.25rem; }
+    button.primary {
+      cursor: pointer; padding: 0.55rem 0.95rem; font-size: 1rem; border-radius: 10px;
+      border: 1px solid #2f5da1; background: linear-gradient(#4478bd, #2f5da1); color: #fff;
+    }
+    button.primary:disabled { opacity: 0.55; cursor: not-allowed; }
+    button.secondary {
+      cursor: pointer; padding: 0.45rem 0.85rem; font-size: 0.96rem;
+      border-radius: 10px; border: 1px solid #cfd4dc; background: #f4f6fa;
+      margin-inline-start: 0.35rem;
+    }
+    canvas#scope {
+      width: 100%; max-width: 100%; height: 140px; background: #0f111a; border-radius: 10px;
+    }
+    audio { width: 100%; margin-top: 0.45rem; }
+  </style>
+</head>
+<body>
+  <h1>UCUG1903：指令式合成 / 编曲演示页</h1>
+  <p class="muted">
+    本节配合《实验与网页衔接》方案：同源音频 (<code>assets/gamesong.wav</code>)
+    + 幻灯片可用的静态图谱 +（可选）浏览器内频谱条。请先通过按钮或控件触发播放，以满足移动端「用户手势后出声」的策略。
+  </p>
+
+  <section class="card" aria-labelledby="sec-play">
+    <h2 id="sec-play">播放</h2>
+    <audio id="player" preload="none" controls src="assets/gamesong.wav"></audio>
+    <p class="muted" style="margin-top:.6rem">
+      <button type="button" class="primary" id="fftBtn">使用 Web Audio 播放并绘制频谱</button>
+    <button type="button" class="secondary" id="fftStop">停止并重置</button>
+    </p>
+    <p class="muted">分析与 HTML5 &lt;audio&gt; 二选一出声：开始分析会自动暂停控件播放，避免双倍音量。</p>
+    <canvas id="scope" width="1024" height="176" aria-label="频谱条"></canvas>
+  </section>
+
+  <section class="card" aria-labelledby="sec-plots">
+    <h2 id="sec-plots">静态图谱（导出脚本同源）</h2>
+    <figure>
+      <img src="assets/waveform_detail.png" width="1152" height="403" loading="lazy" alt="节选波形示意" />
+      <figcaption>节选波形 · 源自 <code>export_assets.py</code></figcaption>
+    </figure>
+    <figure>
+      <img src="assets/waveform_full.png" width="1296" height="345" loading="lazy" alt="全长波形" />
+      <figcaption>全长波形</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/spectrogram.png" width="1152" height="460" loading="lazy" alt="短时频谱图" />
+      <figcaption>短时频谱热力图（matplotlib）</figcaption>
+    </figure>
+    <p class="muted"><code>assets/compression_note.txt</code> 由导出脚本自动生成，用于与同段 PCM 尺寸的定性对比摘要。</p>
+  </section>
+
+  <footer class="muted" style="margin-top:.5rem">
+    幻灯片可用的「网站截图」：整页截屏或使用浏览器的开发者工具移动端预览；二维码请运行 <code>tools/make_qr.py</code> 生成并替换为你的线上地址。
+  </footer>
+
+  <script>
+    (function () {
+      var audioEl = document.getElementById("player");
+      var btn = document.getElementById("fftBtn");
+      var stopBtn = document.getElementById("fftStop");
+      var canvas = document.getElementById("scope");
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#0f111a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      var audioCtx = null;
+      var decodedBuffer = null;
+      var analyser = null;
+      var gain = null;
+      var sourceNode = null;
+      var anim = null;
+
+      function cancelAnim() {
+        if (anim) cancelAnimationFrame(anim);
+        anim = null;
+      }
+
+      function drawSpectrum() {
+        if (!analyser) return;
+        var bins = analyser.frequencyBinCount;
+        var data = new Uint8Array(bins);
+        analyser.getByteFrequencyData(data);
+        ctx.fillStyle = "#0f111a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        var bar = canvas.width / bins;
+        for (var i = 0; i < bins; i++) {
+          var h = (data[i] / 255) * canvas.height * 0.92;
+          var hue = 200 + i * 0.1;
+          var light = 40 + data[i] * 0.08;
+          ctx.fillStyle = "hsl(" + hue + ",70%," + light + "%)";
+          ctx.fillRect(i * bar, canvas.height - h, Math.max(bar * 0.86, 1), h);
+        }
+        anim = requestAnimationFrame(drawSpectrum);
+      }
+
+      function stopPlayback() {
+        cancelAnim();
+        if (sourceNode) {
+          try {
+            sourceNode.stop();
+          } catch (e) {
+            /* already stopped */
+          }
+          sourceNode.disconnect();
+          sourceNode = null;
+        }
+      }
+
+      function resetGraphOnly() {
+        cancelAnim();
+        ctx.fillStyle = "#0f111a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      async function ensureContextAndBuffer() {
+        if (!audioCtx) {
+          audioCtx = new AudioContext();
+        }
+        if (decodedBuffer) return;
+        var resp = await fetch("assets/gamesong.wav");
+        var arr = await resp.arrayBuffer();
+        decodedBuffer = await audioCtx.decodeAudioData(arr);
+      }
+
+      stopBtn.addEventListener("click", function () {
+        audioEl.pause();
+        stopPlayback();
+        if (gain) gain.disconnect();
+        if (analyser) analyser.disconnect();
+        gain = null;
+        analyser = null;
+        btn.disabled = false;
+        resetGraphOnly();
+      });
+
+      btn.addEventListener(
+        "click",
+        async function () {
+          if (btn.disabled) return;
+          try {
+            await ensureContextAndBuffer();
+          } catch (e) {
+            console.error(e);
+            alert("无法解码音频文件，确认 site/assets/gamesong.wav 存在且可被静态托管访问。");
+            return;
+          }
+          if (!audioCtx) return;
+          if (audioCtx.state === "suspended") await audioCtx.resume();
+
+          audioEl.pause();
+          stopPlayback();
+          if (analyser) analyser.disconnect();
+          if (gain) gain.disconnect();
+
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 1024;
+          gain = audioCtx.createGain();
+          gain.gain.value = 0.85;
+
+          var src = audioCtx.createBufferSource();
+          src.buffer = decodedBuffer;
+          sourceNode = src;
+          src.connect(analyser);
+          analyser.connect(gain);
+          gain.connect(audioCtx.destination);
+
+          btn.disabled = true;
+          cancelAnim();
+          drawSpectrum();
+
+          src.onended = function () {
+            stopPlayback();
+            btn.disabled = false;
+            cancelAnim();
+            resetGraphOnly();
+          };
+          src.start();
+        },
+        false
+      );
+    })();
+  </script>
+</body>
+</html>
