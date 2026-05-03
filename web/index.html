@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UCUG1903 — 指令式合成编辑器</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>UCUG1903 · 芯片风格乐谱编辑</h1>
+    <p class="sub">
+      与 <code>GameSong.java</code> 相同字段：tick（1 tick = 0.06 s）、通道、音高（半音 + 八度）、音量、时值、波形。
+      默认使用<strong>方波</strong>以呼应课堂「方波/锯齿/噪声易实现」；<strong>正弦</strong>仅作对比。噪声为教学用近似，真实硬件多为 LFSR。
+    </p>
+  </header>
+  <main>
+    <div class="toolbar">
+      <button type="button" class="primary" id="btnPlay">播放</button>
+      <button type="button" id="btnStop">停止</button>
+      <button type="button" id="btnExportWav">导出 WAV</button>
+      <span style="width:1px;height:1.2rem;background:var(--border);margin:0 0.25rem;"></span>
+      <button type="button" id="btnAddRow">添加一行</button>
+      <button type="button" id="btnReset">恢复默认曲</button>
+      <button type="button" id="btnExportJson">导出 JSON</button>
+      <button type="button" id="btnImportJson">导入 JSON</button>
+      <input type="file" id="fileJson" accept=".json,application/json" class="hidden-input" />
+      <span style="width:1px;height:1.2rem;background:var(--border);margin:0 0.25rem;"></span>
+      <button type="button" id="btnCopyJava">复制为 Java 数组</button>
+    </div>
+
+    <div class="wave-panel">
+      <h2>总线波形（时域）</h2>
+      <canvas id="waveCanvas" width="900" height="120"></canvas>
+      <p class="note">播放时显示混合输出。第九页素材：可配合 OBS 录屏此区域 + 系统音频；并使用「导出 WAV」得到同源音频。</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>起始 tick</th>
+            <th>通道</th>
+            <th>note (0–11)</th>
+            <th>octave</th>
+            <th>volume</th>
+            <th>duration (tick)</th>
+            <th>波形</th>
+            <th>频率 Hz</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <p id="status" class="status"></p>
+  </main>
+
+  <script src="song-schema.js"></script>
+  <script src="audio-engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

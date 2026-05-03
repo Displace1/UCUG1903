@@ -1,59 +1,43 @@
 # UCUG1903
 
-课程项目材料：`*GameSong*` 事件驱动的方波编曲示例、幻灯片可用的 **音视频与图谱**导出、以及与静态网页的对齐脚本。
+课程项目：80 年代**指令式合成**叙事 + 可编辑芯片风格乐谱，在浏览器中播放并显示**总线波形**，并支持**导出 WAV**（第九页音频素材）。
 
-详细「实验文稿 + 幻灯片——网页资产映射」参见根目录 **`EXPERIMENT.md`**。
+## Web 编辑器
 
-## 快速开始
+路径：`web/`
 
-### 导出音频与图谱
+### 运行方式
 
-```powershell
-cd d:\git\UCUG1903
-python -m pip install -r tools\requirements.txt
-python tools\export_assets.py
+用**本地 HTTP 服务**打开（`fetch` 需要加载 `default-song.json`；也可依赖失败时的内置最短示例）。
+
+```bash
+cd web
+npx --yes serve -l 8080 .
 ```
 
-输出目录：`site\assets\`（`gamesong.wav`、波形与频谱 PNG、`compression_note.txt`）。
+或已安装 Python 时：
 
-默认从仓库根目录的 `GameSong.java` 读取 `SONG_DATA`。
-
-### 本地预览静态页面
-
-任选其一：
-
-```powershell
-cd d:\git\UCUG1903\site
+```bash
+cd web
 python -m http.server 8080
 ```
 
-浏览器打开：`http://127.0.0.1:8080/index.html`。若从仓库根目录执行，也可以使用 `python -m http.server 8080 --directory site`（Python 3.7+）。
+浏览器访问终端里给出的地址（例如 `http://localhost:8080`）。
 
-### 二维码（占位与正式部署）
+### 功能
 
-先发布 `site/` 到你的静态域名，再填入真实 HTTPS URL：
+- 表格编辑事件：`{起始 tick, 通道, note, octave, volume, duration (tick)}`，可选第 7 列波形：`square` / `sawtooth` / `noise` / `sine`（正弦仅作对比）。
+- **播放 / 停止**，实时波形（`AnalyserNode` + Canvas）。
+- **导出 WAV**：与当前表格内容一致（`OfflineAudioContext` 离线路由）。
+- **导入 / 导出 JSON**；**复制为 Java 数组片段**（第七列波形字符串需按需删掉才能贴进 `int[][]`）。
 
-```powershell
-pip install -r tools\requirements_qr.txt
-python tools\make_qr.py --url https://<your-real-url>/
-```
+时间与 `GameSong.java` 一致：**1 tick = 0.06 s**。默认示例与 `GameSong.SONG_DATA` 对齐，见 `web/default-song.json`。
 
-### 幻灯片用小视频补丁（可选）
+### 第九页（视频 + 音频）
 
-需要本机安装 FFmpeg：
+1. 用 **OBS**（或其它录屏）录制浏览器窗口，并采集系统/应用音频 → 得到演示**视频**。
+2. 点击 **导出 WAV** → 得到与编辑内容一致的**音频**。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\make_demo_video.ps1
-```
+### Java 参考
 
-生成 `site/assets/demo_slides.mp4`（已由 `.gitignore` 默认忽略）。
-
-## 目录
-
-| Path | Purpose |
-|------|---------|
-| `GameSong.java` | Java 常量 `SONG_DATA`（解析源） |
-| `GAMESONGS.txt` | 编曲草稿片段（按需合并入主表） |
-| `tools/export_assets.py` | 合成 WAV + PNG + 存储对比摘要 |
-| `site/index.html` | 幻灯片可用的演示页骨架 |
-| `EXPERIMENT.md` | **实验段落定稿**：步骤、观测、数值引用规范 |
+`GameSong.java` 中的 `SONG_DATA` 为六列整型数组；网页在 JSON/贴回 Java 时多一列波形字符串，仅用于前端合成。
