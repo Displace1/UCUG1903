@@ -43,6 +43,21 @@
   const MAX_UNITS = 16;
   const MIN_UNITS = 1;
 
+  /**
+   * 《春日影》开头简谱 **32123432**（1=do=C₄）：mi–re–do–re–mi–fa–mi–re，pitchIndex **5,4,3,4,5,6,5,4**。
+   * 各音时长（秒）：**0.6, 0.3, 0.6, 0.3, 0.5, 0.2, 0.3, 0.6**；波形 / 叠噪错开便于对比。
+   */
+  const HARUHIKAGE_INTRO_UNITS = [
+    { pitchIndex: 5, wave: "square", addNoise: false, durSec: 0.6 },
+    { pitchIndex: 4, wave: "sawtooth", addNoise: false, durSec: 0.3 },
+    { pitchIndex: 3, wave: "square", addNoise: true, durSec: 0.6 },
+    { pitchIndex: 4, wave: "sawtooth", addNoise: false, durSec: 0.3 },
+    { pitchIndex: 5, wave: "square", addNoise: false, durSec: 0.5 },
+    { pitchIndex: 6, wave: "sawtooth", addNoise: true, durSec: 0.2 },
+    { pitchIndex: 5, wave: "square", addNoise: false, durSec: 0.3 },
+    { pitchIndex: 4, wave: "sawtooth", addNoise: true, durSec: 0.6 },
+  ];
+
   /** 总谱块颜色：方波 / 锯齿 */
   const SCORE_COLORS = {
     square: "#2563eb",
@@ -125,6 +140,25 @@
     }
     rebuildUnitSelect();
     loadUnitToUi(currentUnitIndex);
+  }
+
+  function applyHaruhikageIntro() {
+    engine.stop();
+    currentUnitIndex = 0;
+    units = HARUHIKAGE_INTRO_UNITS.map((u) => ({
+      pitchIndex: u.pitchIndex,
+      wave: u.wave,
+      addNoise: u.addNoise,
+      durSec: clampDuration(u.durSec),
+    }));
+    elUnitCount.value = String(units.length);
+    rebuildUnitSelect();
+    loadUnitToUi(0);
+    setStatus(
+      "已载入《春日影》动机示例（" +
+        units.length +
+        " 个单元）：方波/锯齿与叠噪组合已错开，可直接播放或再编辑。"
+    );
   }
 
   function getWaveFromUi() {
@@ -448,9 +482,16 @@
     ctx2d.lineWidth = 1.5;
     ctx2d.beginPath();
     const mid = h / 2;
+    const pad = 3;
+    const half = Math.max(mid - pad, 4);
+    /** >1 放大时域可视化摆动（与真实输出音量无关）；峰值贴边时会在画布内裁切 */
+    const gain = 2.1;
     for (let i = 0; i < buf.length; i++) {
       const x = (i / (buf.length - 1)) * w;
-      const y = mid + ((buf[i] - 128) / 128) * (mid - 4);
+      let v = ((buf[i] - 128) / 128) * gain;
+      let y = mid + v * half;
+      if (y < pad) y = pad;
+      if (y > h - pad) y = h - pad;
       if (i === 0) ctx2d.moveTo(x, y);
       else ctx2d.lineTo(x, y);
     }
@@ -553,6 +594,10 @@
     );
   });
 
+  document.getElementById("btnHaruhikage").addEventListener("click", () => {
+    applyHaruhikageIntro();
+  });
+
   document.getElementById("btnExportWav").addEventListener("click", async () => {
     const list = buildFullTimeline();
     const verr = validateList(list);
@@ -576,9 +621,6 @@
 
   fillPitchSelect();
   fillDurSelect();
-  units = [defaultUnit()];
-  rebuildUnitSelect();
-  loadUnitToUi(0);
-  setStatus("为每个单元选择音高、时长、波形，可选叠加噪声，然后依次播放。");
+  applyHaruhikageIntro();
   loop();
 })();
