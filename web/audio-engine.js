@@ -48,7 +48,7 @@
     const offset = this.playBaseTime;
     const nodes = [];
     const normalized = events.map((e) => S.normalizeEvent(e));
-    normalized.sort((a, b) => a.t - b.t);
+    normalized.sort((a, b) => S.eventStartSeconds(a) - S.eventStartSeconds(b));
     for (const ev of normalized) {
       if (S.isRest(ev)) continue;
       scheduleEventAt(ctx, ev, this.master, offset, nodes);
@@ -59,10 +59,10 @@
 
   function scheduleEventAt(ctx, ev, masterGain, audioTimeZero, nodesOut) {
     if (S.isRest(ev)) return;
-    const dur = S.ticksToSeconds(ev.d);
+    const dur = S.eventDurationSeconds(ev);
     const g = voiceGainScalar(ev.v);
     if (g <= 0) return;
-    const t0 = audioTimeZero + S.ticksToSeconds(ev.t);
+    const t0 = audioTimeZero + S.eventStartSeconds(ev);
     const t1 = t0 + dur;
 
     const env = ctx.createGain();
@@ -80,7 +80,11 @@
       src.loop = true;
       const band = ctx.createBiquadFilter();
       band.type = "lowpass";
-      band.frequency.setValueAtTime(6000, t0);
+      const fc =
+        ev.freqHz != null && ev.freqHz > 0
+          ? Math.min(10000, Math.max(400, ev.freqHz * 6))
+          : 6000;
+      band.frequency.setValueAtTime(fc, t0);
       src.connect(band);
       band.connect(env);
       src.start(t0);
@@ -112,9 +116,16 @@
     this.stopVoiceNodes();
   };
 
-  /** @returns {Promise<Blob>} */
-  AudioEngine.prototype.renderWav = async function (events) {
-    const duration = S.songEndSeconds(events);
+  /**
+   * @returns {Promise<Blob>}
+   * @param {number} [minTotalSec] 含空单元的总占位时长（秒），导出 WAV 不短于此
+   */
+  AudioEngine.prototype.renderWav = async function (events, minTotalSec) {
+    let duration = S.songEndSeconds(events);
+    if (minTotalSec != null && Number.isFinite(minTotalSec)) {
+      const need = minTotalSec + 0.15;
+      if (need > duration) duration = need;
+    }
     const length = Math.ceil(SAMPLE_RATE * duration);
     const offline = new OfflineAudioContext(1, length, SAMPLE_RATE);
     const master = offline.createGain();
@@ -122,7 +133,7 @@
     master.connect(offline.destination);
     const nodes = [];
     const normalized = events.map((e) => S.normalizeEvent(e));
-    normalized.sort((a, b) => a.t - b.t);
+    normalized.sort((a, b) => S.eventStartSeconds(a) - S.eventStartSeconds(b));
     for (const ev of normalized) {
       if (S.isRest(ev)) continue;
       scheduleEventAt(offline, ev, master, offline.currentTime, nodes);

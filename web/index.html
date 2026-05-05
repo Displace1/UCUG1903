@@ -3,56 +3,85 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>UCUG1903 — 指令式合成编辑器</title>
+  <title>UCUG1903 — 多单元顺序播放</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
-    <h1>UCUG1903 · 芯片风格乐谱编辑</h1>
+    <h1>UCUG1903 · C 大调（低 sol～高 mi，13 音）</h1>
     <p class="sub">
-      与 <code>GameSong.java</code> 相同字段：tick（1 tick = 0.06 s）、通道、音高（半音 + 八度）、音量、时值、波形。
-      默认使用<strong>方波</strong>以呼应课堂「方波/锯齿/噪声易实现」；<strong>正弦</strong>仅作对比。噪声为教学用近似，真实硬件多为 LFSR。
+      每个<strong>基础单元</strong>选 <strong>一种音高</strong>（自低 sol 至高 mi 共 13 级）、<strong>一种波形</strong>（方波或锯齿），并可选择是否<strong>叠加噪声</strong>（带限白噪近似，与 PPT 中 LFSR 噪声对应教学）。
+      可选 <strong>1～16 个单元</strong> 依次播放；每段时长可在 <strong>0.2～1.0 s</strong>（步长 0.1）选择。波形图为全程输出。
     </p>
   </header>
+
   <main>
-    <div class="toolbar">
-      <button type="button" class="primary" id="btnPlay">播放</button>
-      <button type="button" id="btnStop">停止</button>
-      <button type="button" id="btnExportWav">导出 WAV</button>
-      <span style="width:1px;height:1.2rem;background:var(--border);margin:0 0.25rem;"></span>
-      <button type="button" id="btnAddRow">添加一行</button>
-      <button type="button" id="btnReset">恢复默认曲</button>
-      <button type="button" id="btnExportJson">导出 JSON</button>
-      <button type="button" id="btnImportJson">导入 JSON</button>
-      <input type="file" id="fileJson" accept=".json,application/json" class="hidden-input" />
-      <span style="width:1px;height:1.2rem;background:var(--border);margin:0 0.25rem;"></span>
-      <button type="button" id="btnCopyJava">复制为 Java 数组</button>
+    <section class="controls panel">
+      <div class="field-row">
+        <label class="field-label" for="unitCount">单元数量</label>
+        <input type="number" id="unitCount" min="1" max="16" value="1" step="1" />
+        <label class="field-label tight" for="unitEdit">编辑单元</label>
+        <select id="unitEdit" aria-label="选择要编辑的单元"></select>
+        <span class="field-suffix" id="totalDur"></span>
+      </div>
+      <div class="field-row">
+        <label class="field-label" for="amp">整体响度</label>
+        <input type="range" id="amp" min="5" max="100" value="70" />
+        <span id="ampVal" class="field-suffix">70%</span>
+      </div>
+      <p class="hint">
+        切换「编辑单元」分别配置音高、<strong>持续时间</strong>（0.2–1.0 s）、波形与噪声。
+      </p>
+      <div class="toolbar-row">
+        <button type="button" id="btnPlay" class="primary">依次播放全部单元</button>
+        <button type="button" id="btnStop">停止</button>
+        <button type="button" id="btnClear">重置当前单元</button>
+        <button type="button" id="btnExportWav" class="secondary">导出 WAV（整段）</button>
+      </div>
+    </section>
+
+    <div class="panel edit-simple">
+      <h3 class="panel-title" id="editTitle">正在编辑：单元 1</h3>
+      <div class="field-row align-top">
+        <label class="field-label" for="pitchSelect">音高</label>
+        <select id="pitchSelect" aria-label="唱名"></select>
+      </div>
+      <div class="field-row align-top">
+        <label class="field-label" for="durSelect">持续</label>
+        <select id="durSelect" aria-label="持续时间秒"></select>
+      </div>
+      <fieldset class="wave-pick">
+        <legend>波形（二选一）</legend>
+        <div class="radio-row">
+          <label><input type="radio" name="wave" value="square" checked /> 方波</label>
+          <label><input type="radio" name="wave" value="sawtooth" /> 锯齿</label>
+        </div>
+      </fieldset>
+      <div class="field-row noise-row">
+        <label class="noise-check-label">
+          <input type="checkbox" id="chkNoise" />
+          叠加噪声（近似）
+        </label>
+      </div>
     </div>
 
-    <div class="wave-panel">
-      <h2>总线波形（时域）</h2>
+    <div class="panel score-panel">
+      <h2 class="score-title">单元总谱（示意）</h2>
+      <p class="score-hint">
+        自左向右为时间顺序；<strong>块宽</strong>表示该单元时长，<strong>每一行对应一个唱名</strong>（色块只占所在音高那一行）；<strong>颜色</strong>区分布形；<strong>黄褐斜线 + 描边</strong>为叠噪；<strong>蓝框</strong>为当前编辑单元。<strong>点击</strong>某色块可跳到该单元编辑表单。
+      </p>
+      <canvas id="scoreCanvas" width="900" height="320"></canvas>
+      <ul class="score-legend" aria-label="图例">
+        <li><span class="lg swatch sq"></span>方波</li>
+        <li><span class="lg swatch saw"></span>锯齿</li>
+        <li><span class="lg noise-legend">斜线 / 描边</span>叠噪</li>
+      </ul>
+    </div>
+
+    <div class="wave-panel panel">
+      <h2>混合输出波形（播放全程）</h2>
       <canvas id="waveCanvas" width="900" height="120"></canvas>
-      <p class="note">播放时显示混合输出。第九页素材：可配合 OBS 录屏此区域 + 系统音频；并使用「导出 WAV」得到同源音频。</p>
-    </div>
-
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>起始 tick</th>
-            <th>通道</th>
-            <th>note (0–11)</th>
-            <th>octave</th>
-            <th>volume</th>
-            <th>duration (tick)</th>
-            <th>波形</th>
-            <th>频率 Hz</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
+      <p class="note">各单元独立时长；时间轴按各段设置首尾相接。</p>
     </div>
     <p id="status" class="status"></p>
   </main>
